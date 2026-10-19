@@ -881,6 +881,11 @@
       target = '<div class="target"><b>' + r.length + ' rodadas</b><span>' + esc(String(e.detail).replace(/^\d+ rodadas de /, '')) + '</span></div>';
       body = '<div class="rounds">' + r.map((x, k) => '<button type="button" class="rd" data-act="toggle" data-s="' + k + '" aria-pressed="' + x.done + '" aria-label="Rodada ' + (k + 1) + '">' + (k + 1) + '</button>').join('') + '</div>';
     }
+    if (e.kind !== 'timed') {
+      const w = e.kind === 'rounds' ? 'rodada' : 'série';
+      body += '<div class="row2" style="margin-top:12px"><button type="button" class="btn small" data-act="rmset"' + (r.length <= 1 || r[r.length - 1].done ? ' disabled' : '') + '>− Tirar ' + w + '</button>' +
+        '<button type="button" class="btn small" data-act="addset"' + (r.length >= 20 ? ' disabled' : '') + '>+ Mais uma ' + w + '</button></div>';
+    }
     const dm = demo(itemInfo(e));
     const demoHtml = dm
       ? '<div class="demo n' + dm.panels.length + '">' + dm.panels.map((p, k) => '<figure class="panel">' + p + '<figcaption>' + esc(dm.labels[k] || '') + '</figcaption></figure>').join('') + '</div>' +
@@ -1306,6 +1311,14 @@
       render();
     }
     else if (a === 'rmphoto') { delete fotos[el.dataset.id]; saveFotos(); flash = 'Foto removida.'; const y = window.scrollY; render(); window.scrollTo(0, y); }
+    else if (a === 'addset') {
+      const e = curSess().items[nav.ex];
+      if (e.sets.length < 20) { e.sets.push(e.kind === 'sets' ? { kg: '', reps: '', done: false } : { done: false }); save(); const y = window.scrollY; render(); window.scrollTo(0, y); }
+    }
+    else if (a === 'rmset') {
+      const e = curSess().items[nav.ex];
+      if (e.sets.length > 1 && !e.sets[e.sets.length - 1].done) { e.sets.pop(); save(); const y = window.scrollY; render(); window.scrollTo(0, y); }
+    }
     else if (a === 'sedit') { nav.edit = !nav.edit; render(); }
     else if (a === 'sadd') go('lib', { pickS: nav.sid });
     else if (a === 'swapr') {
