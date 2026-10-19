@@ -655,7 +655,7 @@
   const num = (v) => { const n = parseFloat(String(v).replace(',', '.')); return isNaN(n) ? 0 : n; };
   const fmtN = (n) => (Math.round(n * 10) / 10).toString().replace('.', ',');
 
-  let state = { routines: DEFAULT_ROUTINES(), sched: DEFAULT_SCHED(), custom: [], sessions: [], lastKg: {}, rest: 60 };
+  let state = { routines: DEFAULT_ROUTINES(), sched: DEFAULT_SCHED(), custom: [], sessions: [], lastKg: {}, rest: 60, today: null };
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
   const clean = (s) => {
     if (!s || typeof s !== 'object' || !Array.isArray(s.routines) || !Array.isArray(s.sessions)) return null;
@@ -667,7 +667,8 @@
       custom: Array.isArray(s.custom) ? s.custom.filter((e) => e && e.id && e.name) : [],
       sessions: s.sessions.filter((x) => x && x.id && x.date && Array.isArray(x.items)),
       lastKg: s.lastKg && typeof s.lastKg === 'object' ? s.lastKg : {},
-      rest: [45, 60, 90].indexOf(s.rest) >= 0 ? s.rest : 60
+      rest: [45, 60, 90].indexOf(s.rest) >= 0 ? s.rest : 60,
+      today: s.today && s.today.date && s.today.rid ? { date: s.today.date, rid: s.today.rid } : null
     };
   };
   try {
@@ -737,8 +738,10 @@
     save();
     return s;
   }
+  const setToday = (rid) => { state.today = { date: today(), rid: rid }; save(); };
   function openSessionFor(rid, date) {
     const d = date || today();
+    if (d === today()) setToday(rid);
     const ex = state.sessions.find((s) => s.rid === rid && s.date === d && !s.fin);
     return ex || startSession(rid, d);
   }
@@ -766,14 +769,15 @@
   }
   function renderHoje() {
     const t = new Date(), td = ds(t), wd = t.getDay();
-    const r = state.sched[wd] && getR(state.sched[wd]);
+    const ovr = state.today && state.today.date === td ? getR(state.today.rid) : null;
+    const r = ovr || (state.sched[wd] && getR(state.sched[wd]));
     const live = state.sessions.filter((s) => !s.fin && anyDone(s)).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
     const mon = new Date(t.getFullYear(), t.getMonth(), t.getDate() - ((wd + 6) % 7));
     let wk = '';
     for (let i = 0; i < 7; i++) {
       const d = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i), s = ds(d), w = d.getDay();
       const did = state.sessions.some((x) => x.date === s && anyDone(x));
-      const rr = state.sched[w] && getR(state.sched[w]);
+      const rr = (s === td && r) || (state.sched[w] && getR(state.sched[w]));
       wk += '<div class="wd' + (did ? ' did' : '') + (s === td ? ' today' : '') + '"><span>' + DOW[w] + '</span><i>' + (did ? CHECK : '') + '</i><small>' + (rr ? esc(rr.name.split(' ')[0]) : '—') + '</small></div>';
     }
     let main = '';
@@ -786,7 +790,7 @@
     if (r) {
       const doneToday = state.sessions.some((s) => s.rid === r.id && s.date === td && s.fin);
       if (!(live && live.rid === r.id && live.date === td)) {
-        main += '<div class="tcard" style="' + themeOf(r.hue) + '"><span class="eyebrow">Hoje · ' + DOWF[wd] + '</span><h2>' + esc(r.name) + '</h2>' + groupTags(r) +
+        main += '<div class="tcard" style="' + themeOf(r.hue) + '"><span class="eyebrow">Hoje · ' + DOWF[wd] + (ovr && ovr.id !== state.sched[wd] ? ' · escolhido por você' : '') + '</span><h2>' + esc(r.name) + '</h2>' + groupTags(r) +
           '<p class="meta">' + rItems(r).length + ' exercícios</p>' +
           (doneToday ? '<div class="banner" style="margin-top:14px">Treino de hoje concluído. Bom trabalho!</div>' : '') +
           '<button type="button" class="btn primary block" data-act="start" data-rid="' + r.id + '">' + (doneToday ? 'Fazer de novo' : 'Começar treino') + '</button></div>';
@@ -1310,7 +1314,7 @@
         const keep = s.items.filter((it) => it.sets.some((x) => x.done)), have = {};
         keep.forEach((it) => { have[it.ex] = 1; });
         s.items = rItems(r).filter((e) => !have[e.id]).map(snap).concat(keep);
-        s.rid = r.id; s.name = r.name; s.hue = r.hue || 1; save();
+        s.rid = r.id; s.name = r.name; s.hue = r.hue || 1; if (s.date === today()) state.today = { date: today(), rid: r.id }; save();
         flash = 'Treino trocado para “' + r.name + '”.'; render(); window.scrollTo(0, 0);
       }
     }
@@ -1381,7 +1385,7 @@
     }
     else if (a === 'erase') {
       two(el, 'Toque de novo para apagar tudo', () => {
-        state = { routines: DEFAULT_ROUTINES(), sched: DEFAULT_SCHED(), custom: [], sessions: [], lastKg: {}, rest: 60 };
+        state = { routines: DEFAULT_ROUTINES(), sched: DEFAULT_SCHED(), custom: [], sessions: [], lastKg: {}, rest: 60, today: null };
         save(); fotos = {}; saveFotos(); hideRest(); flash = 'Todos os dados foram apagados.'; render();
       });
     }
@@ -1418,7 +1422,7 @@
       if (inp.value && /^\d{4}-\d{2}-\d{2}$/.test(inp.value)) { s.date = inp.value > today() ? today() : inp.value; save(); }
       render();
     }
-    else if (f === 'sched') { state.sched[+inp.dataset.wd] = inp.value || null; save(); }
+    else if (f === 'sched') { state.sched[+inp.dataset.wd] = inp.value || null; if (+inp.dataset.wd === new Date().getDay()) state.today = null; save(); }
     else if (f === 'hex') { nav.hex = inp.value; render(); }
   });
 
